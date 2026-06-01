@@ -2,32 +2,37 @@ package vista;
 
 import dao.PracticaDAO;
 import dao.ProgramaDAO;
+import dao.TipoPracticaDAO;
 import modelo.Practica;
 import modelo.Programa;
+import modelo.TipoPractica;
+import util.SelectorFecha;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.List;
 
 public class PanelPracticas extends JPanel {
 
-    private JTextField txtNombre, txtSemestre, txtFechaInicio, txtFechaFin;
+    private JTextField txtNombre;
+    private SelectorFecha selectorInicio, selectorFin;
+    private JSpinner spnSemestre;
     private JComboBox<String> cmbEstado;
     private JComboBox<Programa> cmbPrograma;
-    private JComboBox<String> cmbTipo;
+    private JComboBox<TipoPractica> cmbTipo;
     private JTable tabla;
     private DefaultTableModel modeloTabla;
     private PracticaDAO dao;
     private ProgramaDAO programaDAO;
+    private TipoPracticaDAO tipoPracticaDAO;
     private int idSeleccionado = -1;
     private static final SimpleDateFormat SDF = new SimpleDateFormat("dd/MM/yyyy");
 
     public PanelPracticas() {
         dao = new PracticaDAO();
         programaDAO = new ProgramaDAO();
+        tipoPracticaDAO = new TipoPracticaDAO();
         setLayout(new BorderLayout(10, 10));
         setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
 
@@ -35,7 +40,6 @@ public class PanelPracticas extends JPanel {
         lblTitulo.setFont(new Font("SansSerif", Font.BOLD, 16));
         add(lblTitulo, BorderLayout.NORTH);
 
-        // Formulario
         JPanel formPanel = new JPanel(new GridBagLayout());
         formPanel.setBorder(BorderFactory.createTitledBorder("Datos de la práctica"));
         GridBagConstraints gbc = new GridBagConstraints();
@@ -43,18 +47,27 @@ public class PanelPracticas extends JPanel {
         gbc.anchor = GridBagConstraints.WEST;
 
         txtNombre      = new JTextField(22);
-        txtSemestre    = new JTextField(5);
-        txtFechaInicio = new JTextField(10);
-        txtFechaFin    = new JTextField(10);
-        cmbEstado      = new JComboBox<>(new String[]{"Abierta", "Cerrada"});
-        cmbTipo        = new JComboBox<>(new String[]{"1", "2"}); // IDs de TipoPractica
+        selectorInicio = new SelectorFecha();
+        selectorFin    = new SelectorFecha();
+        // Estado inicial SIEMPRE Cerrada (la directora abre explícitamente, nunca queda abierta al crear)
+        cmbEstado      = new JComboBox<>(new String[]{"Cerrada", "Abierta"});
+        cmbPrograma    = new JComboBox<>();
+        cmbTipo        = new JComboBox<>();
+
+        // Semestre como spinner: 1 a 8 (máximo permitido por el programa de licenciatura)
+        SpinnerNumberModel spinModel = new SpinnerNumberModel(1, 1, 8, 1);
+        spnSemestre = new JSpinner(spinModel);
+        spnSemestre.setPreferredSize(new Dimension(60, 25));
+
+        // Listener: al cambiar semestre, sugerir tipo automáticamente (debe ir DESPUÉS de crear el spinner)
+        spnSemestre.addChangeListener(e -> sugerirTipoPorSemestre());
 
         Object[][] campos = {
-            {"Nombre:", txtNombre},
-            {"Semestre:", txtSemestre},
-            {"Fecha inicio (dd/mm/aaaa):", txtFechaInicio},
-            {"Fecha fin (dd/mm/aaaa):", txtFechaFin},
-            {"Estado:", cmbEstado}
+            {"Nombre:",            txtNombre},
+            {"Semestre (1–8):",   spnSemestre},
+            {"Fecha inicio:",      selectorInicio},
+            {"Fecha fin:",         selectorFin},
+            {"Estado:",            cmbEstado}
         };
 
         for (int i = 0; i < campos.length; i++) {
@@ -66,17 +79,16 @@ public class PanelPracticas extends JPanel {
 
         gbc.gridx = 0; gbc.gridy = campos.length; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
         formPanel.add(new JLabel("Programa:"), gbc);
-        gbc.gridx = 1;
-        cmbPrograma = new JComboBox<>();
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1;
         cargarProgramas();
         formPanel.add(cmbPrograma, gbc);
 
         gbc.gridx = 0; gbc.gridy = campos.length + 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-        formPanel.add(new JLabel("Tipo práctica (ID):"), gbc);
-        gbc.gridx = 1;
+        formPanel.add(new JLabel("Tipo de práctica:"), gbc);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1;
+        cargarTipos();
         formPanel.add(cmbTipo, gbc);
 
-        // Botones
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton btnGuardar    = new JButton("Guardar");
         JButton btnActualizar = new JButton("Actualizar");
@@ -84,24 +96,27 @@ public class PanelPracticas extends JPanel {
         JButton btnAbrir      = new JButton("Abrir");
         JButton btnCerrar     = new JButton("Cerrar");
         JButton btnLimpiar    = new JButton("Limpiar");
+        JButton btnRefrescar  = new JButton("⟳ Refrescar");
 
-        btnGuardar.setBackground(new Color(33, 130, 70));    btnGuardar.setForeground(Color.BLACK);
-        btnActualizar.setBackground(new Color(33, 80, 160)); btnActualizar.setForeground(Color.BLACK);
-        btnEliminar.setBackground(new Color(180, 40, 40));   btnEliminar.setForeground(Color.BLACK);
-        btnAbrir.setBackground(new Color(0, 140, 100));      btnAbrir.setForeground(Color.BLACK);
-        btnCerrar.setBackground(new Color(140, 80, 0));      btnCerrar.setForeground(Color.BLACK);
+        btnGuardar.setBackground(new Color(33, 130, 70));     btnGuardar.setForeground(Color.BLACK);
+        btnActualizar.setBackground(new Color(33, 80, 160));  btnActualizar.setForeground(Color.BLACK);
+        btnEliminar.setBackground(new Color(180, 40, 40));    btnEliminar.setForeground(Color.BLACK);
+        btnAbrir.setBackground(new Color(0, 140, 100));       btnAbrir.setForeground(Color.BLACK);
+        btnCerrar.setBackground(new Color(140, 80, 0));       btnCerrar.setForeground(Color.BLACK);
+        btnRefrescar.setBackground(new Color(80, 80, 80));    btnRefrescar.setForeground(Color.BLACK);
 
-        btnPanel.add(btnGuardar); btnPanel.add(btnActualizar); btnPanel.add(btnEliminar);
-        btnPanel.add(btnAbrir);   btnPanel.add(btnCerrar);     btnPanel.add(btnLimpiar);
+        for (JButton b : new JButton[]{btnGuardar, btnActualizar, btnEliminar,
+                                        btnAbrir, btnCerrar, btnLimpiar, btnRefrescar}) {
+            b.setFocusPainted(false);
+            btnPanel.add(b);
+        }
 
         gbc.gridx = 0; gbc.gridy = campos.length + 2; gbc.gridwidth = 2;
         formPanel.add(btnPanel, gbc);
-
         add(formPanel, BorderLayout.NORTH);
 
-        // Tabla
         modeloTabla = new DefaultTableModel(
-            new String[]{"ID", "Nombre", "Semestre", "Inicio", "Fin", "Estado", "Programa"}, 0) {
+            new String[]{"ID", "Nombre", "Semestre", "Inicio", "Fin", "Estado", "Programa", "Tipo"}, 0) {
             public boolean isCellEditable(int r, int c) { return false; }
         };
         tabla = new JTable(modeloTabla);
@@ -110,27 +125,54 @@ public class PanelPracticas extends JPanel {
         scroll.setBorder(BorderFactory.createTitledBorder("Prácticas registradas"));
         add(scroll, BorderLayout.CENTER);
 
-        // Eventos
         btnGuardar.addActionListener(e -> guardar());
         btnActualizar.addActionListener(e -> actualizar());
         btnEliminar.addActionListener(e -> eliminar());
         btnAbrir.addActionListener(e -> cambiarEstado("Abierta"));
         btnCerrar.addActionListener(e -> cambiarEstado("Cerrada"));
         btnLimpiar.addActionListener(e -> limpiar());
+        btnRefrescar.addActionListener(e -> { cargarProgramas(); cargarTipos(); cargarTabla();
+            JOptionPane.showMessageDialog(this, "Datos actualizados."); });
 
         tabla.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && tabla.getSelectedRow() != -1) {
                 int fila = tabla.getSelectedRow();
                 idSeleccionado = (int) modeloTabla.getValueAt(fila, 0);
                 txtNombre.setText((String) modeloTabla.getValueAt(fila, 1));
-                txtSemestre.setText(String.valueOf(modeloTabla.getValueAt(fila, 2)));
-                txtFechaInicio.setText((String) modeloTabla.getValueAt(fila, 3));
-                txtFechaFin.setText((String) modeloTabla.getValueAt(fila, 4));
+                spnSemestre.setValue(modeloTabla.getValueAt(fila, 2));
+                // Precargar fechas desde la tabla (formato dd/MM/yyyy)
+                try {
+                    selectorInicio.setFecha(SDF.parse((String) modeloTabla.getValueAt(fila, 3)));
+                    selectorFin.setFecha(SDF.parse((String) modeloTabla.getValueAt(fila, 4)));
+                } catch (Exception ex) {
+                    selectorInicio.limpiar(); selectorFin.limpiar();
+                }
                 cmbEstado.setSelectedItem(modeloTabla.getValueAt(fila, 5));
             }
         });
 
         cargarTabla();
+        // Sugerir tipo por defecto según semestre inicial (1 = Práctica Pedagógica)
+        sugerirTipoPorSemestre();
+    }
+
+    /**
+     * Al cambiar el semestre, selecciona automáticamente el tipo de práctica correspondiente:
+     * Semestres 1-3 → Práctica Pedagógica
+     * Semestres 4-8 → Práctica Pedagógica Investigativa
+     */
+    private void sugerirTipoPorSemestre() {
+        if (cmbTipo.getItemCount() == 0) return;
+        int sem = (int) spnSemestre.getValue();
+        String sugerido = util.Validador.sugerirTipoPractica(sem);
+        if (sugerido == null) return;
+        for (int i = 0; i < cmbTipo.getItemCount(); i++) {
+            TipoPractica tipo = cmbTipo.getItemAt(i);
+            if (tipo.getNombre().toLowerCase().contains(sugerido.toLowerCase().substring(0, 10))) {
+                cmbTipo.setSelectedIndex(i);
+                return;
+            }
+        }
     }
 
     private void cargarProgramas() {
@@ -138,56 +180,90 @@ public class PanelPracticas extends JPanel {
         for (Programa p : programaDAO.listar()) cmbPrograma.addItem(p);
     }
 
-    private Date parseFecha(String texto) {
-        try { return SDF.parse(texto); } catch (ParseException e) { return null; }
+    private void cargarTipos() {
+        cmbTipo.removeAllItems();
+        for (TipoPractica t : tipoPracticaDAO.listar()) cmbTipo.addItem(t);
     }
 
     private void guardar() {
-        if (txtNombre.getText().trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "El nombre es obligatorio."); return;
-        }
-        Date fi = parseFecha(txtFechaInicio.getText());
-        Date ff = parseFecha(txtFechaFin.getText());
-        if (fi == null || ff == null) {
-            JOptionPane.showMessageDialog(this, "Formato de fecha inválido. Use dd/mm/aaaa."); return;
-        }
+        // Validar nombre
+        String errNombre = util.Validador.validarTexto(txtNombre.getText().trim(), "El nombre");
+        if (errNombre != null) { JOptionPane.showMessageDialog(this, errNombre); return; }
+
+        // Validar semestre (1-8)
+        int sem = (int) spnSemestre.getValue();
+        String errSem = util.Validador.validarSemestre(sem);
+        if (errSem != null) { JOptionPane.showMessageDialog(this, errSem); return; }
+
+        // Validar fechas
+        Date fi = selectorInicio.getFecha();
+        Date ff = selectorFin.getFecha();
+        String errFechas = util.Validador.validarFechasPractica(fi, ff);
+        if (errFechas != null) { JOptionPane.showMessageDialog(this, errFechas); return; }
+
+        // Validar programa seleccionado
         if (cmbPrograma.getSelectedItem() == null) {
-            JOptionPane.showMessageDialog(this, "Registrá al menos un programa primero."); return;
+            JOptionPane.showMessageDialog(this, "Debe registrar al menos un programa primero."); return;
         }
-        int sem;
-        try { sem = Integer.parseInt(txtSemestre.getText().trim()); }
-        catch (NumberFormatException ex) { JOptionPane.showMessageDialog(this, "Semestre debe ser un número."); return; }
+        Programa progSeleccionado = (Programa) cmbPrograma.getSelectedItem();
+
+        // Validar que el programa esté activo
+        if (!"Activo".equalsIgnoreCase(progSeleccionado.getEstado())) {
+            JOptionPane.showMessageDialog(this,
+                "El programa seleccionado está inactivo.\nNo se pueden crear prácticas para programas inactivos.",
+                "Programa inactivo", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Validar tipo de práctica
+        if (cmbTipo.getSelectedItem() == null) {
+            JOptionPane.showMessageDialog(this, "Seleccione un tipo de práctica."); return;
+        }
 
         Practica p = new Practica(0, txtNombre.getText().trim(), sem, fi, ff,
-                (String) cmbEstado.getSelectedItem(),
-                ((Programa) cmbPrograma.getSelectedItem()).getIdPrograma(),
-                Integer.parseInt((String) cmbTipo.getSelectedItem()));
+            (String) cmbEstado.getSelectedItem(),
+            progSeleccionado.getIdPrograma(),
+            ((TipoPractica) cmbTipo.getSelectedItem()).getIdTipoPrac());
 
         if (dao.insertar(p)) {
             JOptionPane.showMessageDialog(this, "Práctica guardada correctamente.");
             limpiar(); cargarTabla();
         } else {
-            JOptionPane.showMessageDialog(this, "Error al guardar.", "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this,
+                "Error al guardar la práctica.\nVerifique que no exista ya una práctica en el semestre "
+                + sem + " para este programa.", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
     private void actualizar() {
-        if (idSeleccionado == -1) { JOptionPane.showMessageDialog(this, "Seleccioná una práctica."); return; }
-        Date fi = parseFecha(txtFechaInicio.getText());
-        Date ff = parseFecha(txtFechaFin.getText());
-        if (fi == null || ff == null) { JOptionPane.showMessageDialog(this, "Formato de fecha inválido."); return; }
-        int sem;
-        try { sem = Integer.parseInt(txtSemestre.getText().trim()); }
-        catch (NumberFormatException ex) { JOptionPane.showMessageDialog(this, "Semestre debe ser un número."); return; }
+        if (idSeleccionado == -1) { JOptionPane.showMessageDialog(this, "Seleccione una práctica de la tabla."); return; }
+
+        String errNombre = util.Validador.validarTexto(txtNombre.getText().trim(), "El nombre");
+        if (errNombre != null) { JOptionPane.showMessageDialog(this, errNombre); return; }
+
+        int sem = (int) spnSemestre.getValue();
+        String errSem = util.Validador.validarSemestre(sem);
+        if (errSem != null) { JOptionPane.showMessageDialog(this, errSem); return; }
+
+        Date fi = selectorInicio.getFecha();
+        Date ff = selectorFin.getFecha();
+        String errFechas = util.Validador.validarFechasPractica(fi, ff);
+        if (errFechas != null) { JOptionPane.showMessageDialog(this, errFechas); return; }
+
+        if (cmbPrograma.getSelectedItem() == null || cmbTipo.getSelectedItem() == null) {
+            JOptionPane.showMessageDialog(this, "Debe seleccionar programa y tipo de práctica."); return;
+        }
 
         Practica p = new Practica(idSeleccionado, txtNombre.getText().trim(), sem, fi, ff,
-                (String) cmbEstado.getSelectedItem(),
-                ((Programa) cmbPrograma.getSelectedItem()).getIdPrograma(),
-                Integer.parseInt((String) cmbTipo.getSelectedItem()));
+            (String) cmbEstado.getSelectedItem(),
+            ((Programa) cmbPrograma.getSelectedItem()).getIdPrograma(),
+            ((TipoPractica) cmbTipo.getSelectedItem()).getIdTipoPrac());
 
         if (dao.actualizar(p)) {
-            JOptionPane.showMessageDialog(this, "Práctica actualizada.");
+            JOptionPane.showMessageDialog(this, "Práctica actualizada correctamente.");
             limpiar(); cargarTabla();
+        } else {
+            JOptionPane.showMessageDialog(this, "Error al actualizar la práctica.", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -201,8 +277,8 @@ public class PanelPracticas extends JPanel {
 
     private void eliminar() {
         if (idSeleccionado == -1) { JOptionPane.showMessageDialog(this, "Seleccioná una práctica."); return; }
-        int confirm = JOptionPane.showConfirmDialog(this, "¿Eliminar esta práctica?", "Confirmar", JOptionPane.YES_NO_OPTION);
-        if (confirm == JOptionPane.YES_OPTION) {
+        int c = JOptionPane.showConfirmDialog(this, "¿Eliminar esta práctica?", "Confirmar", JOptionPane.YES_NO_OPTION);
+        if (c == JOptionPane.YES_OPTION) {
             if (dao.eliminar(idSeleccionado)) {
                 JOptionPane.showMessageDialog(this, "Práctica eliminada.");
                 limpiar(); cargarTabla();
@@ -213,23 +289,37 @@ public class PanelPracticas extends JPanel {
     }
 
     private void limpiar() {
-        txtNombre.setText(""); txtSemestre.setText("");
-        txtFechaInicio.setText(""); txtFechaFin.setText("");
+        txtNombre.setText("");
+        spnSemestre.setValue(1);
+        selectorInicio.limpiar();
+        selectorFin.limpiar();
         cmbEstado.setSelectedIndex(0);
         idSeleccionado = -1;
         tabla.clearSelection();
         cargarProgramas();
+        cargarTipos();
     }
 
     private void cargarTabla() {
         modeloTabla.setRowCount(0);
-        List<Practica> lista = dao.listar();
-        for (Practica p : lista) {
-            modeloTabla.addRow(new Object[]{
-                p.getIdPractica(), p.getNombre(), p.getSemestre(),
-                SDF.format(p.getFechaInicio()), SDF.format(p.getFechaFin()),
-                p.getEstado(), p.getIdPrograma()
-            });
+        String sql = "SELECT p.IdPractica, p.Nombre, p.Semestre, p.FechaInicio, p.FechaFin, p.Estado, " +
+                     "pr.Nombre AS Programa, tp.Nombre AS Tipo " +
+                     "FROM Practica p " +
+                     "JOIN Programa pr ON p.IdPrograma = pr.IdPrograma " +
+                     "JOIN TipoPractica tp ON p.IdTipoPrac = tp.IdTipoPrac " +
+                     "ORDER BY p.IdPractica";
+        try (java.sql.Connection con = conexion.Conexion.conectar();
+             java.sql.Statement st = con.createStatement();
+             java.sql.ResultSet rs = st.executeQuery(sql)) {
+            while (rs.next()) {
+                modeloTabla.addRow(new Object[]{
+                    rs.getInt("IdPractica"), rs.getString("Nombre"), rs.getInt("Semestre"),
+                    SDF.format(rs.getDate("FechaInicio")), SDF.format(rs.getDate("FechaFin")),
+                    rs.getString("Estado"), rs.getString("Programa"), rs.getString("Tipo")
+                });
+            }
+        } catch (java.sql.SQLException e) {
+            System.out.println("Error cargar prácticas: " + e.getMessage());
         }
     }
 }

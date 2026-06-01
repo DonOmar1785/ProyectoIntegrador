@@ -25,7 +25,7 @@ public class LoginFrame extends JFrame {
         panelTitulo.setBackground(new Color(33, 53, 85));
         panelTitulo.setPreferredSize(new Dimension(0, 70));
         panelTitulo.setLayout(new GridBagLayout());
-        JLabel lblTitulo = new JLabel("Sistema de Gestión de Prácticas");
+        JLabel lblTitulo = new JLabel("Software de Gestión de Prácticas");
         lblTitulo.setForeground(Color.WHITE);
         lblTitulo.setFont(new Font("SansSerif", Font.BOLD, 15));
         JLabel lblSub = new JLabel("Universidad de Investigación y Desarrollo");

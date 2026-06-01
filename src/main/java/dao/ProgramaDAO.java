@@ -8,15 +8,14 @@ import java.util.List;
 
 public class ProgramaDAO {
 
-    // INSERT
     public boolean insertar(Programa p) {
-        String sql = "INSERT INTO Programa (IdPrograma, Nombre, Facultad, Estado) VALUES (SEQ_PROGRAMA.NEXTVAL, ?, ?, ?)";
+        String sql = "{CALL SP_INSERTAR_PROGRAMA(?, ?, ?)}";
         try (Connection con = Conexion.conectar();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, p.getNombre());
-            ps.setString(2, p.getFacultad());
-            ps.setString(3, p.getEstado());
-            ps.executeUpdate();
+             CallableStatement cs = con.prepareCall(sql)) {
+            cs.setString(1, p.getNombre());
+            cs.setString(2, p.getFacultad());
+            cs.setString(3, p.getEstado());
+            cs.execute();
             return true;
         } catch (SQLException e) {
             System.out.println("Error insertar Programa: " + e.getMessage());
@@ -24,7 +23,6 @@ public class ProgramaDAO {
         }
     }
 
-    // SELECT ALL
     public List<Programa> listar() {
         List<Programa> lista = new ArrayList<>();
         String sql = "SELECT * FROM Programa ORDER BY IdPrograma";
@@ -45,16 +43,15 @@ public class ProgramaDAO {
         return lista;
     }
 
-    // UPDATE
     public boolean actualizar(Programa p) {
-        String sql = "UPDATE Programa SET Nombre=?, Facultad=?, Estado=? WHERE IdPrograma=?";
+        String sql = "{CALL SP_ACTUALIZAR_PROGRAMA(?, ?, ?, ?)}";
         try (Connection con = Conexion.conectar();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, p.getNombre());
-            ps.setString(2, p.getFacultad());
-            ps.setString(3, p.getEstado());
-            ps.setInt(4, p.getIdPrograma());
-            ps.executeUpdate();
+             CallableStatement cs = con.prepareCall(sql)) {
+            cs.setInt(1, p.getIdPrograma());
+            cs.setString(2, p.getNombre());
+            cs.setString(3, p.getFacultad());
+            cs.setString(4, p.getEstado());
+            cs.execute();
             return true;
         } catch (SQLException e) {
             System.out.println("Error actualizar Programa: " + e.getMessage());
@@ -62,13 +59,12 @@ public class ProgramaDAO {
         }
     }
 
-    // DELETE
     public boolean eliminar(int id) {
-        String sql = "DELETE FROM Programa WHERE IdPrograma=?";
+        String sql = "{CALL SP_ELIMINAR_PROGRAMA(?)}";
         try (Connection con = Conexion.conectar();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setInt(1, id);
-            ps.executeUpdate();
+             CallableStatement cs = con.prepareCall(sql)) {
+            cs.setInt(1, id);
+            cs.execute();
             return true;
         } catch (SQLException e) {
             System.out.println("Error eliminar Programa: " + e.getMessage());

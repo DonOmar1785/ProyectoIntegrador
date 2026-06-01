@@ -3,6 +3,7 @@ package vista;
 import dao.ProgramaDAO;
 import modelo.Programa;
 import javax.swing.*;
+import util.Validador;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
@@ -106,10 +107,9 @@ public class PanelProgramas extends JPanel {
     }
 
     private void guardar() {
-        if (txtNombre.getText().trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "El nombre es obligatorio.");
-            return;
-        }
+        String errP = Validador.validarNombre(txtNombre.getText(), "Nombre");
+        if (errP == null) errP = Validador.validarTexto(txtFacultad.getText(), "Facultad");
+        if (errP != null) { JOptionPane.showMessageDialog(this, errP, "Validacion", JOptionPane.WARNING_MESSAGE); return; }
         Programa p = new Programa(0, txtNombre.getText().trim(),
                 txtFacultad.getText().trim(), (String) cmbEstado.getSelectedItem());
         if (dao.insertar(p)) {

@@ -49,4 +49,7 @@ public class Practica {
 
     public int getIdTipoPrac() { return idTipoPrac; }
     public void setIdTipoPrac(int idTipoPrac) { this.idTipoPrac = idTipoPrac; }
+
+    @Override
+    public String toString() { return nombre + " (Sem. " + semestre + ")"; }
 }

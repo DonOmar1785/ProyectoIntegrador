@@ -6,25 +6,19 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * DAO unificado para gestión de usuarios.
- * Maneja la tabla Estudiante. Para Tutor y Asesor se siguen los mismos patrones.
- */
 public class UsuarioDAO {
 
-    // INSERT estudiante
     public boolean insertarEstudiante(Usuario u, int idPrograma) {
-        String sql = "INSERT INTO Estudiante (IdEstudiante, Nombre, Apellido, Documento, Correo, Contrasena, IdPrograma) " +
-                     "VALUES (SEQ_ESTUDIANTE.NEXTVAL, ?, ?, ?, ?, ?, ?)";
+        String sql = "{CALL SP_INSERTAR_ESTUDIANTE(?, ?, ?, ?, ?, ?)}";
         try (Connection con = Conexion.conectar();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, u.getNombre());
-            ps.setString(2, u.getApellido());
-            ps.setString(3, u.getDocumento());
-            ps.setString(4, u.getCorreo());
-            ps.setString(5, u.getContrasena());
-            ps.setInt(6, idPrograma);
-            ps.executeUpdate();
+             CallableStatement cs = con.prepareCall(sql)) {
+            cs.setString(1, u.getNombre());
+            cs.setString(2, u.getApellido());
+            cs.setString(3, u.getDocumento());
+            cs.setString(4, u.getCorreo());
+            cs.setString(5, u.getContrasena());
+            cs.setInt(6, idPrograma);
+            cs.execute();
             return true;
         } catch (SQLException e) {
             System.out.println("Error insertar Estudiante: " + e.getMessage());
@@ -32,7 +26,6 @@ public class UsuarioDAO {
         }
     }
 
-    // SELECT ALL estudiantes
     public List<Usuario> listarEstudiantes() {
         List<Usuario> lista = new ArrayList<>();
         String sql = "SELECT e.IdEstudiante, e.Nombre, e.Apellido, e.Documento, e.Correo, p.Nombre AS Programa " +
@@ -56,18 +49,17 @@ public class UsuarioDAO {
         return lista;
     }
 
-    // UPDATE estudiante
     public boolean actualizarEstudiante(Usuario u, int idPrograma) {
-        String sql = "UPDATE Estudiante SET Nombre=?, Apellido=?, Documento=?, Correo=?, IdPrograma=? WHERE IdEstudiante=?";
+        String sql = "{CALL SP_ACTUALIZAR_ESTUDIANTE(?, ?, ?, ?, ?, ?)}";
         try (Connection con = Conexion.conectar();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, u.getNombre());
-            ps.setString(2, u.getApellido());
-            ps.setString(3, u.getDocumento());
-            ps.setString(4, u.getCorreo());
-            ps.setInt(5, idPrograma);
-            ps.setInt(6, u.getIdUsuario());
-            ps.executeUpdate();
+             CallableStatement cs = con.prepareCall(sql)) {
+            cs.setInt(1, u.getIdUsuario());
+            cs.setString(2, u.getNombre());
+            cs.setString(3, u.getApellido());
+            cs.setString(4, u.getDocumento());
+            cs.setString(5, u.getCorreo());
+            cs.setInt(6, idPrograma);
+            cs.execute();
             return true;
         } catch (SQLException e) {
             System.out.println("Error actualizar Estudiante: " + e.getMessage());
@@ -75,17 +67,40 @@ public class UsuarioDAO {
         }
     }
 
-    // DELETE estudiante
     public boolean eliminarEstudiante(int id) {
-        String sql = "DELETE FROM Estudiante WHERE IdEstudiante=?";
+        String sql = "{CALL SP_ELIMINAR_ESTUDIANTE(?)}";
         try (Connection con = Conexion.conectar();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setInt(1, id);
-            ps.executeUpdate();
+             CallableStatement cs = con.prepareCall(sql)) {
+            cs.setInt(1, id);
+            cs.execute();
             return true;
         } catch (SQLException e) {
             System.out.println("Error eliminar Estudiante: " + e.getMessage());
             return false;
         }
+    }
+
+    public String insertarEstudianteConMensaje(Usuario u, int idPrograma) {
+        String sql = "{CALL SP_INSERTAR_ESTUDIANTE(?, ?, ?, ?, ?, ?)}";
+        try (Connection con = Conexion.conectar();
+             CallableStatement cs = con.prepareCall(sql)) {
+            cs.setString(1, u.getNombre()); cs.setString(2, u.getApellido());
+            cs.setString(3, u.getDocumento()); cs.setString(4, u.getCorreo());
+            cs.setString(5, u.getContrasena()); cs.setInt(6, idPrograma);
+            cs.execute();
+            return null;
+        } catch (SQLException e) { return e.getMessage(); }
+    }
+
+    public String actualizarEstudianteConMensaje(Usuario u, int idPrograma) {
+        String sql = "{CALL SP_ACTUALIZAR_ESTUDIANTE(?, ?, ?, ?, ?, ?)}";
+        try (Connection con = Conexion.conectar();
+             CallableStatement cs = con.prepareCall(sql)) {
+            cs.setInt(1, u.getIdUsuario()); cs.setString(2, u.getNombre());
+            cs.setString(3, u.getApellido()); cs.setString(4, u.getDocumento());
+            cs.setString(5, u.getCorreo()); cs.setInt(6, idPrograma);
+            cs.execute();
+            return null;
+        } catch (SQLException e) { return e.getMessage(); }
     }
 }
