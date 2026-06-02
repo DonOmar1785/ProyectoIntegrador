@@ -27,6 +27,7 @@ public class PanelPracticas extends JPanel {
     private ProgramaDAO programaDAO;
     private TipoPracticaDAO tipoPracticaDAO;
     private int idSeleccionado = -1;
+    private boolean cargandoRegistro = false; // flag para inhibir el listener del spinner durante carga
     private static final SimpleDateFormat SDF = new SimpleDateFormat("dd/MM/yyyy");
 
     public PanelPracticas() {
@@ -60,7 +61,8 @@ public class PanelPracticas extends JPanel {
         spnSemestre.setPreferredSize(new Dimension(60, 25));
 
         // Listener: al cambiar semestre, sugerir tipo automáticamente (debe ir DESPUÉS de crear el spinner)
-        spnSemestre.addChangeListener(e -> sugerirTipoPorSemestre());
+        // cargandoRegistro evita que se sobreescriba el tipo real de BD al seleccionar una fila
+        spnSemestre.addChangeListener(e -> { if (!cargandoRegistro) sugerirTipoPorSemestre(); });
 
         Object[][] campos = {
             {"Nombre:",            txtNombre},
@@ -140,14 +142,39 @@ public class PanelPracticas extends JPanel {
                 idSeleccionado = (int) modeloTabla.getValueAt(fila, 0);
                 txtNombre.setText((String) modeloTabla.getValueAt(fila, 1));
                 spnSemestre.setValue(modeloTabla.getValueAt(fila, 2));
-                // Precargar fechas desde la tabla (formato dd/MM/yyyy)
-                try {
-                    selectorInicio.setFecha(SDF.parse((String) modeloTabla.getValueAt(fila, 3)));
-                    selectorFin.setFecha(SDF.parse((String) modeloTabla.getValueAt(fila, 4)));
-                } catch (Exception ex) {
-                    selectorInicio.limpiar(); selectorFin.limpiar();
-                }
                 cmbEstado.setSelectedItem(modeloTabla.getValueAt(fila, 5));
+
+                // Consultar BD para obtener fechas reales e IDs de programa/tipo
+                // (evita el bug del año mal parseado desde el string de la tabla)
+                String sqlP = "SELECT FechaInicio, FechaFin, IdPrograma, IdTipoPrac FROM Practica WHERE IdPractica = " + idSeleccionado;
+                cargandoRegistro = true; // inhibir sugerirTipoPorSemestre mientras cargamos
+                try (java.sql.Connection con = conexion.Conexion.conectar();
+                     java.sql.Statement st = con.createStatement();
+                     java.sql.ResultSet rs = st.executeQuery(sqlP)) {
+                    if (rs.next()) {
+                        selectorInicio.setFecha(rs.getDate("FechaInicio"));
+                        selectorFin.setFecha(rs.getDate("FechaFin"));
+                        int idProg = rs.getInt("IdPrograma");
+                        int idTipo = rs.getInt("IdTipoPrac");
+                        for (int i = 0; i < cmbPrograma.getItemCount(); i++) {
+                            if (cmbPrograma.getItemAt(i).getIdPrograma() == idProg) {
+                                cmbPrograma.setSelectedIndex(i);
+                                break;
+                            }
+                        }
+                        for (int i = 0; i < cmbTipo.getItemCount(); i++) {
+                            if (cmbTipo.getItemAt(i).getIdTipoPrac() == idTipo) {
+                                cmbTipo.setSelectedIndex(i);
+                                break;
+                            }
+                        }
+                    }
+                } catch (java.sql.SQLException ex) {
+                    System.out.println("Error al cargar practica: " + ex.getMessage());
+                    selectorInicio.limpiar(); selectorFin.limpiar();
+                } finally {
+                    cargandoRegistro = false; // siempre restaurar, aunque falle
+                }
             }
         });
 
